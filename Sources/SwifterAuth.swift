@@ -116,42 +116,45 @@ public extension Swifter {
         }, failure: failure)
     }
   
-    func authorizeSSO(success: SSOTokenSuccessHandler?, failure: FailureHandler? = nil) {
+    func authorizeSSO(with callbackUrl: URL, completion: @escaping (Result<Credential.OAuthAccessToken, SwifterError>) -> ()) {
         guard let client = client as? SwifterAppProtocol else {
-            let error = SwifterError(message: "SSO not supported AppOnly client",
-                                     kind: .invalidClient)
-            failure?(error)
+            let error = SwifterError(message: "SSO not supported AppOnly client", kind: .invalidClient)
+            
+            completion(.failure(error))
             return
         }
-        
-        let urlScheme = "swifter-\(client.consumerKey)"
         
         let nc = NotificationCenter.default
         self.swifterCallbackToken = nc.addObserver(forName: .swifterSSOCallback, object: nil, queue: .main) { notification in
             self.swifterCallbackToken = nil
             guard let url = notification.userInfo?[CallbackNotification.optionsURLKey] as? URL else { return }
-            guard url.scheme == urlScheme else { return }
+            guard url.scheme == callbackUrl.scheme else {
+                let error = SwifterError(message: "Callback url scheme \(url.scheme ?? "") did not match original \(callbackUrl.scheme ?? "")", kind: .badOAuthResponse)
+                completion(.failure(error))
+                return
+            }
             
             let isCanceled = url.host == nil
             if isCanceled {
                 let error = SwifterError(message: "User cancelled login from Twitter App", kind: .cancelled)
-                failure?(error)
+                completion(.failure(error))
             } else {
                 let params = url.queryParamsForSSO
                 let secret = params["secret"]!
                 let token = params["token"]!
-                let credentialToken = Credential.OAuthAccessToken(key: token, secret: secret)
+                let username = params["username"]!
+                var credentialToken = Credential.OAuthAccessToken(key: token, secret: secret)
+                credentialToken.screenName = username
                 self.client.credential = Credential(accessToken: credentialToken)
-                success?(credentialToken)
+                completion(.success(credentialToken))
             }
         }
         
-        let url = URL(string: "twitterauth://authorize?consumer_key=\(client.consumerKey)&consumer_secret=\(client.consumerSecret)&oauth_callback=\(urlScheme)")!
+        let url = URL(string: "twitterauth://authorize?consumer_key=\(client.consumerKey)&consumer_secret=\(client.consumerSecret)&oauth_callback=\(callbackUrl.absoluteString)")!
         UIApplication.shared.open(url, options: [:], completionHandler: { (success) in
             if !success {
-                let error = SwifterError(message: "Cannot open twitter app",
-                                         kind: .noTwitterApp)
-                failure?(error)
+                let error = SwifterError(message: "Cannot open twitter app", kind: .noTwitterApp)
+                completion(.failure(error))
             }
         })
     }
