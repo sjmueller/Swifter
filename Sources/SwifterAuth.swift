@@ -150,7 +150,7 @@ public extension Swifter {
             }
         }
         
-        let url = URL(string: "twitterauth://authorize?consumer_key=\(client.consumerKey)&consumer_secret=\(client.consumerSecret)&oauth_callback=\(callbackUrl.absoluteString)")!
+        let url = URL(string: "twitterauth://authorize?consumer_key=\(client.consumerKey)&consumer_secret=\(client.consumerSecret)&oauth_callback=\(callbackUrl.scheme ?? "")")!
         UIApplication.shared.open(url, options: [:], completionHandler: { (success) in
             if !success {
                 let error = SwifterError(message: "Cannot open twitter app", kind: .noTwitterApp)
